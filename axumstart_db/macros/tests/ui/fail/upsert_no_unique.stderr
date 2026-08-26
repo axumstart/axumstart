@@ -1,0 +1,5 @@
+error: `upsert` requires `#[unique(col)]` on the method to name the conflict column
+  --> tests/ui/fail/upsert_no_unique.rs:17:14
+   |
+17 |     async fn upsert(&self, values: UserValues) -> sqlx::Result<UserRow>;
+   |              ^^^^^^

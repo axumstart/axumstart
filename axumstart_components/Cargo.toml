@@ -4,3 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+parking_lot.workspace = true
+axumstart_components_macros = { path = "macros" }
+axum.workspace = true
+async-trait.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+inventory.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }

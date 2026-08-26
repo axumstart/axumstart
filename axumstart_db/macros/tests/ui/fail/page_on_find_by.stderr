@@ -1,0 +1,5 @@
+error: `Page` parameter is only supported on find_all* methods
+  --> tests/ui/fail/page_on_find_by.rs:12:14
+   |
+12 |     async fn find_by_id(&self, id: i32, page: Page) -> sqlx::Result<Option<UserRow>>;
+   |              ^^^^^^^^^^

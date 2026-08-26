@@ -1,0 +1,5 @@
+error: SqlxUpdate requires exactly one field marked with #[key]
+ --> tests/ui/fail/update_no_key.rs:5:8
+  |
+5 | struct UserRowUpdate {
+  |        ^^^^^^^^^^^^^

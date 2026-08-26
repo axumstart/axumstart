@@ -1,0 +1,5 @@
+error: `#[order_by(...)]` on `find_all` requires the method name to end with `_ordered`
+  --> tests/ui/fail/order_by_missing_suffix.rs:13:14
+   |
+13 |     async fn find_all(&self) -> sqlx::Result<Vec<AchievementRow>>;
+   |              ^^^^^^^^

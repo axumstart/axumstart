@@ -1,0 +1,5 @@
+error: no codegen rule for `refresh_cache`; expected one of: find_by_*, find_all, find_all_by_*, find_all_order_by_*, find_random_by_*, find_all_<bool_field>, count_by_*, exists_by_*, delete_by_*, set_*_by_*, insert, insert_all, insert_or_ignore, upsert, update, pool — or provide a method body
+  --> tests/ui/fail/unknown_method.rs:11:14
+   |
+11 |     async fn refresh_cache(&self) -> sqlx::Result<()>;
+   |              ^^^^^^^^^^^^^

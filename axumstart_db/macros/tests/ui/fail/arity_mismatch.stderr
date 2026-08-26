@@ -1,0 +1,11 @@
+error: `find_by_id` takes 2 bindable parameter(s) but its name implies 1 (excluding `&self` and any `Page` parameter)
+  --> tests/ui/fail/arity_mismatch.rs:12:14
+   |
+12 |     async fn find_by_id(&self, id: i32, extra: i32) -> sqlx::Result<Option<UserRow>>;
+   |              ^^^^^^^^^^
+
+error: `set_username_by_id` takes 1 bindable parameter(s) but its name implies 2 (excluding `&self` and any `Page` parameter)
+  --> tests/ui/fail/arity_mismatch.rs:13:14
+   |
+13 |     async fn set_username_by_id(&self, username: String) -> sqlx::Result<()>;
+   |              ^^^^^^^^^^^^^^^^^^

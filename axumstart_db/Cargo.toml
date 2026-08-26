@@ -3,4 +3,11 @@ name = "axumstart_db"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+postgres = ["axumstart_db_macros/postgres", "sqlx/postgres"]
+mysql = ["axumstart_db_macros/mysql", "sqlx/mysql"]
+sqlite = ["axumstart_db_macros/sqlite", "sqlx/sqlite"]
+
 [dependencies]
+axumstart_db_macros = { path = "macros" }
+sqlx.workspace = true

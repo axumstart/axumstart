@@ -1,0 +1,11 @@
+error[E0609]: no field `usrname` on type `&UserRow`
+  --> tests/ui/fail/column_typo.rs:12:14
+   |
+12 |     async fn find_by_usrname(&self, usrname: String) -> sqlx::Result<Option<UserRow>>;
+   |              ^^^^^^^^^^^^^^^ unknown field
+   |
+help: a field with a similar name exists
+   |
+12 -     async fn find_by_usrname(&self, usrname: String) -> sqlx::Result<Option<UserRow>>;
+12 +     async fn username(&self, usrname: String) -> sqlx::Result<Option<UserRow>>;
+   |
