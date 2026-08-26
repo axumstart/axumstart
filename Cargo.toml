@@ -1,0 +1,9 @@
+[package]
+name = "axumstart"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+members = ["axumstart_components", "axumstart_db"]
+
+[dependencies]
