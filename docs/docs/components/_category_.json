@@ -1,0 +1,8 @@
+{
+  "label": "axumstart_components",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "description": "Async dependency injection for Axum services: a typed component container, derive macros for registration, and an Inject<T> extractor."
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "label": "axumstart_db",
+  "position": 3,
+  "link": {
+    "type": "generated-index",
+    "description": "A #[repository] macro that generates sqlx-backed repository implementations from trait method names, plus SqlxInsert/SqlxUpdate derives."
+  }
+}
