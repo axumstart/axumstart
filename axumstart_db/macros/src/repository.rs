@@ -471,7 +471,12 @@ fn gen_body(
         gen_delegated(sig, ctx, exec, "update", quote!(__sqlx_update_in))
     } else if dispatch_name == "insert" {
         no_order_by(sig, order_cols, name)?;
-        gen_delegated(sig, ctx, exec, "insert", quote!(__sqlx_insert_into))
+        let method = if returns_unit(&sig.output) {
+            quote!(__sqlx_insert_into_void)
+        } else {
+            quote!(__sqlx_insert_into)
+        };
+        gen_delegated(sig, ctx, exec, "insert", method)
     } else if dispatch_name == "insert_or_ignore" {
         no_order_by(sig, order_cols, name)?;
         gen_delegated(sig, ctx, exec, "insert_or_ignore", quote!(__sqlx_insert_ignore_into))
@@ -573,6 +578,13 @@ fn generic_arg(ty: &Type, seg_name: &str) -> Option<Type> {
 fn result_ok_type(ret: &ReturnType) -> Option<Type> {
     let ReturnType::Type(_, ty) = ret else { return None };
     generic_arg(ty, "Result")
+}
+
+/// True for `sqlx::Result<()>` — used by `insert`/`insert_all` to skip RETURNING (or, on
+/// MySQL, the write-then-select-back emulation entirely) when the caller doesn't want the
+/// row back.
+fn returns_unit(ret: &ReturnType) -> bool {
+    matches!(result_ok_type(ret), Some(Type::Tuple(t)) if t.elems.is_empty())
 }
 
 fn fetch_method(ret: &ReturnType) -> TokenStream2 {
@@ -1191,8 +1203,13 @@ fn gen_insert_all(
         )
     })?;
     let table = ctx.table;
+    let method = if returns_unit(&sig.output) {
+        quote!(__sqlx_insert_all_into_void)
+    } else {
+        quote!(__sqlx_insert_all_into)
+    };
     Ok((
-        quote! { <#elem_ty>::__sqlx_insert_all_into(#values, #table, #exec).await },
+        quote! { <#elem_ty>::#method(#values, #table, #exec).await },
         quote!(),
     ))
 }

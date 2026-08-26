@@ -74,6 +74,7 @@ fn returning_impl(name: &syn::Ident, field_names: &[&syn::Ident]) -> syn::Result
         (1..=field_names.len()).map(dialect::placeholder).collect::<Vec<_>>().join(", ");
 
     let sql_template = format!("INSERT INTO \"{{}}\" ({cols}) VALUES ({placeholders}) RETURNING *");
+    let void_sql_template = format!("INSERT INTO \"{{}}\" ({cols}) VALUES ({placeholders})");
     let ignore_sql_template =
         format!("INSERT INTO \"{{}}\" ({cols}) VALUES ({placeholders}) ON CONFLICT DO NOTHING");
     let insert_all_prefix_template = format!("INSERT INTO \"{{}}\" ({cols}) ");
@@ -105,6 +106,27 @@ fn returning_impl(name: &syn::Ident, field_names: &[&syn::Ident]) -> syn::Result
                     #(#bind_calls)*
                     .fetch_one(executor)
                     .await
+            }
+
+            // Same INSERT, no RETURNING — for callers that don't want the row back.
+            pub async fn __sqlx_insert_into_void<'e, E>(
+                self,
+                table: &'static str,
+                executor: E,
+            ) -> ::sqlx::Result<()>
+            where
+                E: ::sqlx::Executor<'e, Database = ::axumstart_db::Db>,
+            {
+                static __SQL_VOID: ::std::sync::OnceLock<::std::boxed::Box<str>> =
+                    ::std::sync::OnceLock::new();
+                let sql: &'static str = __SQL_VOID
+                    .get_or_init(|| ::std::format!(#void_sql_template, table).into_boxed_str())
+                    .as_ref();
+                ::sqlx::query(sql)
+                    #(#bind_calls)*
+                    .execute(executor)
+                    .await
+                    .map(|_| ())
             }
 
             // INSERT ... ON CONFLICT DO NOTHING — returns () on success
@@ -149,6 +171,27 @@ fn returning_impl(name: &syn::Ident, field_names: &[&syn::Ident]) -> syn::Result
                 });
                 __qb.push(" RETURNING *");
                 __qb.build_query_as::<Row>().fetch_all(executor).await
+            }
+
+            // Same multi-row INSERT, no RETURNING — for callers that don't want the rows back.
+            pub async fn __sqlx_insert_all_into_void<'e, E>(
+                rows: ::std::vec::Vec<Self>,
+                table: &'static str,
+                executor: E,
+            ) -> ::sqlx::Result<()>
+            where
+                E: ::sqlx::Executor<'e, Database = ::axumstart_db::Db>,
+            {
+                if rows.is_empty() {
+                    return ::std::result::Result::Ok(());
+                }
+                let mut __qb = ::sqlx::QueryBuilder::<::axumstart_db::Db>::new(
+                    ::std::format!(#insert_all_prefix_template, table),
+                );
+                __qb.push_values(rows, |mut __b, __row| {
+                    #(#push_bind_calls)*
+                });
+                __qb.build().execute(executor).await.map(|_| ())
             }
 
             // INSERT ... ON CONFLICT (conflict_col) DO UPDATE SET all_other_cols = EXCLUDED.col RETURNING *
@@ -255,6 +298,29 @@ fn mysql_impl(name: &syn::Ident, field_names: &[&syn::Ident], key_col: &str) -> 
                     .await
             }
 
+            // Same INSERT, no follow-up SELECT — for callers that don't want the row back.
+            // Unlike the Row-returning version above, this doesn't need `E: Copy` (only one
+            // statement), so it also works with `#[transactional]`'s `&mut DbConnection`.
+            pub async fn __sqlx_insert_into_void<'e, E>(
+                self,
+                table: &'static str,
+                executor: E,
+            ) -> ::sqlx::Result<()>
+            where
+                E: ::sqlx::Executor<'e, Database = ::axumstart_db::Db>,
+            {
+                static __INSERT_SQL_VOID: ::std::sync::OnceLock<::std::boxed::Box<str>> =
+                    ::std::sync::OnceLock::new();
+                let insert_sql: &'static str = __INSERT_SQL_VOID
+                    .get_or_init(|| ::std::format!(#insert_sql_template, table).into_boxed_str())
+                    .as_ref();
+                ::sqlx::query(insert_sql)
+                    #(#bind_calls)*
+                    .execute(executor)
+                    .await
+                    .map(|_| ())
+            }
+
             // INSERT IGNORE — single statement, no follow-up SELECT needed.
             pub async fn __sqlx_insert_ignore_into<'e, E>(
                 self,
@@ -311,6 +377,29 @@ fn mysql_impl(name: &syn::Ident, field_names: &[&syn::Ident], key_col: &str) -> 
                     .bind(__first_id + __count)
                     .fetch_all(executor)
                     .await
+            }
+
+            // Same multi-row INSERT, no follow-up SELECT — for callers that don't want the
+            // rows back. Unlike the Row-returning version above, this doesn't need `E: Copy`
+            // (only one statement), so it also works with `#[transactional]`.
+            pub async fn __sqlx_insert_all_into_void<'e, E>(
+                rows: ::std::vec::Vec<Self>,
+                table: &'static str,
+                executor: E,
+            ) -> ::sqlx::Result<()>
+            where
+                E: ::sqlx::Executor<'e, Database = ::axumstart_db::Db>,
+            {
+                if rows.is_empty() {
+                    return ::std::result::Result::Ok(());
+                }
+                let mut __qb = ::sqlx::QueryBuilder::<::axumstart_db::Db>::new(
+                    ::std::format!(#insert_all_prefix_template, table),
+                );
+                __qb.push_values(rows, |mut __b, __row| {
+                    #(#push_bind_calls)*
+                });
+                __qb.build().execute(executor).await.map(|_| ())
             }
 
             // INSERT ... ON DUPLICATE KEY UPDATE col = VALUES(col), ... then SELECT-back by
