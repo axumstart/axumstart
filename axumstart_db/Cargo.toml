@@ -14,3 +14,8 @@ sqlite = ["axumstart_db_macros/sqlite", "sqlx/sqlite"]
 [dependencies]
 axumstart_db_macros = { path = "macros", version = "0.1.4" }
 sqlx.workspace = true
+
+[dev-dependencies]
+sqlx = { workspace = true, features = ["derive"] }
+tokio = { workspace = true, features = ["macros", "rt"] }
+async-trait.workspace = true

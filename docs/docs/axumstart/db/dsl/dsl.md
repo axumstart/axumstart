@@ -57,6 +57,9 @@ so it works identically on all three backends, Postgres included. A method whose
 `_in` at all switches its *entire* WHERE clause to the `QueryBuilder` path, not just that one
 condition.
 
+An empty `_in` list renders `IN (NULL)`, so it matches no rows without producing invalid `IN ()`.
+SQL identifiers are quoted for the selected backend while filter values remain bound.
+
 ### Connectors — `_and_` / `_or_`
 
 Chain fields with `_and_` / `_or_`: `first_by_username_or_email`, `first_by_user_id_and_deleted_at_is_null`.
@@ -111,10 +114,16 @@ offset)` or `Page::number(page, size)`) appends `LIMIT $n OFFSET $m` — detecte
 name, so it can go anywhere in the parameter list. Supported on `find_all_by_*`, bare `find_all`,
 `find_all_order_by_*`, and `find_all_{bool_field}` only — see [find_all](./find_all.md).
 
+For external input, prefer `Page::try_new(limit, offset)` or `Page::try_number(page, size)`;
+they reject negative values and overflow. Generated queries validate `Page` before sending SQL.
+
 ## `_this_week`
 
 `find_all_by_*_this_week` filters to the current ISO week (Monday start) — see
 [find_all](./find_all.md) for the full caveat on cross-dialect `TEXT`/`TIMESTAMP` behavior.
+
+The complete filter is parenthesized before the week predicate, so an OR branch cannot bypass the
+date condition. SQLite's boundary expression returns the current Monday even when today is Monday.
 
 ## `#[transactional]`
 

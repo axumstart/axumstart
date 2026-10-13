@@ -314,15 +314,15 @@ fn component_config_struct(input: ItemStruct) -> TokenStream {
 }
 
 fn is_component_provider_ref(ty: &Type) -> bool {
-  if let Type::Reference(r) = ty {
-    if let Type::Path(p) = &*r.elem {
-      return p
-        .path
-        .segments
-        .last()
-        .map(|s| s.ident == "ComponentProvider")
-        .unwrap_or(false);
-    }
+  if let Type::Reference(r) = ty
+    && let Type::Path(p) = &*r.elem
+  {
+    return p
+      .path
+      .segments
+      .last()
+      .map(|s| s.ident == "ComponentProvider")
+      .unwrap_or(false);
   }
   false
 }

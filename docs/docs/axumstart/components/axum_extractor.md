@@ -28,6 +28,5 @@ async fn build_app() -> Router {
 }
 ```
 
-`Inject<T>` rejects with a `String` (used as the Axum rejection body) naming the missing type if
-`T` was never registered — this only happens if the component is missing from the container, not
-per-request.
+If `T` was never registered, `Inject<T>` rejects with `MissingComponent`: HTTP 500 and the generic
+body `component unavailable`. The missing type is logged to server stderr, not exposed to clients.

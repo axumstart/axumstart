@@ -79,10 +79,10 @@ const OP_SUFFIXES: &[(&str, Op)] = &[
 
 fn split_op(field: &str) -> (&str, Op) {
   for (suffix, op) in OP_SUFFIXES {
-    if let Some(col) = field.strip_suffix(suffix) {
-      if !col.is_empty() {
-        return (col, *op);
-      }
+    if let Some(col) = field.strip_suffix(suffix)
+      && !col.is_empty()
+    {
+      return (col, *op);
     }
   }
   (field, Op::Eq)
@@ -197,6 +197,7 @@ pub struct Relation {
 /// filter-side binds, not the SET-side ones), so it usually stays 0.
 pub fn build_where(
   conds: &[Condition],
+  table: &str,
   relations: &[Relation],
   sql_offset: usize,
   bind_offset: usize,
@@ -214,6 +215,7 @@ pub fn build_where(
   for c in conds {
     let target = resolve_target(
       &c.column,
+      table,
       relations,
       &mut joins_needed,
       &mut probe_cols,
@@ -259,6 +261,7 @@ pub fn build_where(
 
 fn resolve_target(
   column: &str,
+  table: &str,
   relations: &[Relation],
   joins_needed: &mut Vec<String>,
   probe_cols: &mut Vec<String>,
@@ -272,7 +275,11 @@ fn resolve_target(
       // resolve to, so even the "id" column must go through the JOIN.
       if r.kind == RelationKind::BelongsTo && col == "id" {
         probe_cols.push(r.fk.clone());
-        return r.fk.clone();
+        return format!(
+          "{}.{}",
+          crate::dialect::quote_ident(table),
+          crate::dialect::quote_ident(&r.fk)
+        );
       }
       if !joins_needed.contains(&r.table) {
         joins_needed.push(r.table.clone());
@@ -280,11 +287,19 @@ fn resolve_target(
       if r.kind.fans_out() {
         *fan_out = true;
       }
-      return format!("\"{}\".{col}", r.table);
+      return format!(
+        "{}.{}",
+        crate::dialect::quote_ident(&r.table),
+        crate::dialect::quote_ident(col)
+      );
     }
   }
   probe_cols.push(column.to_string());
-  column.to_string()
+  format!(
+    "{}.{}",
+    crate::dialect::quote_ident(table),
+    crate::dialect::quote_ident(column)
+  )
 }
 
 pub fn join_clauses(table: &str, needed: &[String], relations: &[Relation]) -> String {
@@ -292,18 +307,32 @@ pub fn join_clauses(table: &str, needed: &[String], relations: &[Relation]) -> S
         .iter()
         .filter_map(|name| relations.iter().find(|r| &r.table == name))
         .map(|r| match r.kind {
-            RelationKind::BelongsTo => {
-                format!("JOIN \"{0}\" ON \"{0}\".id = \"{table}\".{1}", r.table, r.fk)
+        RelationKind::BelongsTo => {
+                format!(
+                  "JOIN {target} ON {target}.id = {base}.{fk}",
+                  target = crate::dialect::quote_ident(&r.table),
+                  base = crate::dialect::quote_ident(table),
+                  fk = crate::dialect::quote_ident(&r.fk),
+                )
             }
             RelationKind::HasOne | RelationKind::HasMany => {
-                format!("JOIN \"{0}\" ON \"{0}\".{1} = \"{table}\".id", r.table, r.fk)
+                format!(
+                  "JOIN {target} ON {target}.{fk} = {base}.id",
+                  target = crate::dialect::quote_ident(&r.table),
+                  base = crate::dialect::quote_ident(table),
+                  fk = crate::dialect::quote_ident(&r.fk),
+                )
             }
             RelationKind::BelongsToMany => {
                 let through = r.through.as_deref().unwrap_or_default();
                 let other_fk = r.other_fk.as_deref().unwrap_or_default();
                 format!(
-                    "JOIN \"{through}\" ON \"{through}\".{} = \"{table}\".id JOIN \"{}\" ON \"{}\".id = \"{through}\".{other_fk}",
-                    r.fk, r.table, r.table
+                    "JOIN {through} ON {through}.{fk} = {base}.id JOIN {target} ON {target}.id = {through}.{other_fk}",
+                    through = crate::dialect::quote_ident(through),
+                    fk = crate::dialect::quote_ident(&r.fk),
+                    base = crate::dialect::quote_ident(table),
+                    target = crate::dialect::quote_ident(&r.table),
+                    other_fk = crate::dialect::quote_ident(other_fk),
                 )
             }
         })
@@ -314,11 +343,17 @@ pub fn join_clauses(table: &str, needed: &[String], relations: &[Relation]) -> S
 /// "col_desc" → ("col DESC", "col"), "col_asc" → ("col ASC", "col"), "col" → ("col", "col")
 pub fn format_order_col(s: &str) -> (String, String) {
   if let Some(col) = s.strip_suffix("_desc") {
-    (format!("{col} DESC"), col.to_string())
+    (
+      format!("{} DESC", crate::dialect::quote_ident(col)),
+      col.to_string(),
+    )
   } else if let Some(col) = s.strip_suffix("_asc") {
-    (format!("{col} ASC"), col.to_string())
+    (
+      format!("{} ASC", crate::dialect::quote_ident(col)),
+      col.to_string(),
+    )
   } else {
-    (s.to_string(), s.to_string())
+    (crate::dialect::quote_ident(s), s.to_string())
   }
 }
 
@@ -433,8 +468,11 @@ mod tests {
   #[test]
   fn where_placeholders_skip_no_param_ops() {
     let conds = parse_conditions("user_id_and_deleted_at_is_null_and_elo_gt").unwrap();
-    let wc = build_where(&conds, &[], 0, 0, &pg_placeholder);
-    assert_eq!(wc.sql, "user_id = $1 AND deleted_at IS NULL AND elo > $2");
+    let wc = build_where(&conds, "user", &[], 0, 0, &pg_placeholder);
+    assert_eq!(
+      wc.sql.replace('`', "\""),
+      "\"user\".\"user_id\" = $1 AND \"user\".\"deleted_at\" IS NULL AND \"user\".\"elo\" > $2"
+    );
     assert_eq!(wc.params, 2);
     assert_eq!(wc.probe_cols, vec!["user_id", "deleted_at", "elo"]);
     assert!(!wc.has_in);
@@ -443,8 +481,8 @@ mod tests {
   #[test]
   fn where_with_offset() {
     let conds = parse_conditions("id").unwrap();
-    let wc = build_where(&conds, &[], 2, 0, &pg_placeholder);
-    assert_eq!(wc.sql, "id = $3");
+    let wc = build_where(&conds, "user", &[], 2, 0, &pg_placeholder);
+    assert_eq!(wc.sql.replace('`', "\""), "\"user\".\"id\" = $3");
     assert_eq!(wc.params, 1);
   }
 
@@ -472,8 +510,11 @@ mod tests {
   fn join_resolution() {
     let relations = vec![belongs_to("user")];
     let conds = parse_conditions("user_email_and_user_id").unwrap();
-    let wc = build_where(&conds, &relations, 0, 0, &pg_placeholder);
-    assert_eq!(wc.sql, "\"user\".email = $1 AND user_id = $2");
+    let wc = build_where(&conds, "order", &relations, 0, 0, &pg_placeholder);
+    assert_eq!(
+      wc.sql.replace('`', "\""),
+      "\"user\".\"email\" = $1 AND \"order\".\"user_id\" = $2"
+    );
     assert_eq!(wc.joins_needed, vec!["user"]);
     // joined column not probed; FK shortcut column is
     assert_eq!(wc.probe_cols, vec!["user_id"]);
@@ -496,8 +537,11 @@ mod tests {
       has_many("order", "user"),
     ];
     let conds = parse_conditions("profile_id_and_order_status").unwrap();
-    let wc = build_where(&conds, &relations, 0, 0, &pg_placeholder);
-    assert_eq!(wc.sql, "\"profile\".id = $1 AND \"order\".status = $2");
+    let wc = build_where(&conds, "user", &relations, 0, 0, &pg_placeholder);
+    assert_eq!(
+      wc.sql.replace('`', "\""),
+      "\"profile\".\"id\" = $1 AND \"order\".\"status\" = $2"
+    );
     assert_eq!(wc.joins_needed, vec!["profile", "order"]);
     assert!(wc.probe_cols.is_empty());
     assert!(wc.fan_out);
@@ -513,12 +557,12 @@ mod tests {
       through: Some("post_tag".to_string()),
     }];
     let conds = parse_conditions("tag_name").unwrap();
-    let wc = build_where(&conds, &relations, 0, 0, &pg_placeholder);
-    assert_eq!(wc.sql, "\"tag\".name = $1");
+    let wc = build_where(&conds, "post", &relations, 0, 0, &pg_placeholder);
+    assert_eq!(wc.sql.replace('`', "\""), "\"tag\".\"name\" = $1");
     assert!(wc.fan_out);
     assert_eq!(
-      join_clauses("post", &wc.joins_needed, &relations),
-      "JOIN \"post_tag\" ON \"post_tag\".post_id = \"post\".id JOIN \"tag\" ON \"tag\".id = \"post_tag\".tag_id"
+      join_clauses("post", &wc.joins_needed, &relations).replace('`', "\""),
+      "JOIN \"post_tag\" ON \"post_tag\".\"post_id\" = \"post\".id JOIN \"tag\" ON \"tag\".id = \"post_tag\".\"tag_id\""
     );
   }
 
@@ -535,7 +579,7 @@ mod tests {
       },
     ];
     let conds = parse_conditions("user_email_and_profile_bio").unwrap();
-    let wc = build_where(&conds, &relations, 0, 0, &pg_placeholder);
+    let wc = build_where(&conds, "user", &relations, 0, 0, &pg_placeholder);
     assert!(!wc.fan_out);
   }
 
@@ -544,7 +588,7 @@ mod tests {
     let (filter, order) = split_order("user_id_this_week_order_by_created_at_desc");
     assert_eq!(filter, "user_id_this_week");
     let (order_sql, order_col) = order.unwrap();
-    assert_eq!(order_sql, "ORDER BY created_at DESC");
+    assert_eq!(order_sql.replace('`', "\""), "ORDER BY \"created_at\" DESC");
     assert_eq!(order_col, "created_at");
     let (filter, week) = split_this_week(filter);
     assert_eq!(filter, "user_id");
@@ -560,7 +604,7 @@ mod tests {
   #[test]
   fn in_condition_sets_has_in_and_chunks() {
     let conds = parse_conditions("id_in_and_elo_gt").unwrap();
-    let wc = build_where(&conds, &[], 0, 0, &pg_placeholder);
+    let wc = build_where(&conds, "item", &[], 0, 0, &pg_placeholder);
     assert!(wc.has_in);
     assert_eq!(wc.params, 2);
     match &wc.chunks[..] {
@@ -571,9 +615,9 @@ mod tests {
         WhereChunk::Literal(l1),
         WhereChunk::Bind(1),
       ] => {
-        assert_eq!(l0, "id IN ");
+        assert_eq!(l0.replace('`', "\""), "\"item\".\"id\" IN ");
         assert_eq!(conn, " AND ");
-        assert_eq!(l1, "elo > ");
+        assert_eq!(l1.replace('`', "\""), "\"item\".\"elo\" > ");
       }
       other => panic!("unexpected chunk shape: {other:?}"),
     }

@@ -4,7 +4,9 @@ use syn::{Expr, ItemFn, LitStr, parse_macro_input};
 
 mod krate;
 
-const METHODS: &[&str] = &["get", "post", "put", "delete", "patch", "head", "options", "trace", "connect"];
+const METHODS: &[&str] = &[
+  "get", "post", "put", "delete", "patch", "head", "options", "trace", "connect",
+];
 
 enum ThisAttr {
   Method(&'static str, LitStr),

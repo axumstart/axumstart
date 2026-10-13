@@ -1,4 +1,4 @@
-use axumstart_components::{ComponentProvider, OnCreate, async_trait, component, Component};
+use axumstart_components::{Component, ComponentProvider, OnCreate, async_trait, component};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -27,7 +27,9 @@ struct InvHttpClient {
 
 #[component]
 fn build_inv_http_client() -> InvHttpClient {
-  InvHttpClient { label: "sync-no-ctx" }
+  InvHttpClient {
+    label: "sync-no-ctx",
+  }
 }
 
 struct InvAsyncThing {
@@ -89,7 +91,9 @@ struct InvFactoryOnCreate {
 
 #[component]
 fn build_inv_factory_on_create() -> InvFactoryOnCreate {
-  InvFactoryOnCreate { created: AtomicBool::new(false) }
+  InvFactoryOnCreate {
+    created: AtomicBool::new(false),
+  }
 }
 
 #[async_trait]

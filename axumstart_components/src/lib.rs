@@ -12,25 +12,21 @@ use tokio::sync::OnceCell;
 pub mod axum;
 
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
-type InjectableFactory = Arc<dyn Fn(ComponentProvider) -> BoxFuture<Arc<dyn Any + Send + Sync>> + Send + Sync>;
+type InjectableFactory =
+  Arc<dyn Fn(ComponentProvider) -> BoxFuture<Arc<dyn Any + Send + Sync>> + Send + Sync>;
+type ComponentInstances = Arc<Mutex<HashMap<TypeId, Arc<OnceCell<Arc<dyn Any + Send + Sync>>>>>>;
+
+tokio::task_local! {
+  // Scoped per factory future: nested calls inherit the chain, sibling futures and
+  // spawned tasks do not share mutable cycle-detection state.
+  static RESOLUTION: Vec<(usize, TypeId, &'static str)>;
+}
 
 #[derive(Default, Clone)]
 pub struct ComponentProvider {
   blueprints: Arc<Mutex<HashMap<TypeId, InjectableFactory>>>,
-  instances: Arc<Mutex<HashMap<TypeId, Arc<OnceCell<Arc<dyn Any + Send + Sync>>>>>>,
-  resolving: Arc<Mutex<Vec<(TypeId, &'static str)>>>,
+  instances: ComponentInstances,
   names: Arc<Mutex<HashMap<TypeId, &'static str>>>,
-}
-
-struct ResolveGuard<'a> {
-  resolving: &'a Mutex<Vec<(TypeId, &'static str)>>,
-  type_id: TypeId,
-}
-
-impl Drop for ResolveGuard<'_> {
-  fn drop(&mut self) {
-    self.resolving.lock().retain(|(id, _)| *id != self.type_id);
-  }
 }
 
 #[derive(Clone)]
@@ -43,8 +39,13 @@ impl Components {
     self.components.len()
   }
 
+  pub fn is_empty(&self) -> bool {
+    self.components.is_empty()
+  }
+
   pub fn get<T: ?Sized + 'static + Send + Sync>(&self) -> Option<Arc<T>> {
-    self.components
+    self
+      .components
       .get(&TypeId::of::<T>())
       .and_then(|any| any.downcast_ref::<Arc<T>>())
       .cloned()
@@ -65,7 +66,10 @@ impl ComponentProvider {
     F: Fn(ComponentProvider) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = T> + Send + 'static,
   {
-    self.names.lock().insert(TypeId::of::<T>(), std::any::type_name::<T>());
+    self
+      .names
+      .lock()
+      .insert(TypeId::of::<T>(), std::any::type_name::<T>());
     let mut lock = self.blueprints.lock();
     lock.insert(
       TypeId::of::<T>(),
@@ -110,7 +114,10 @@ impl ComponentProvider {
   where
     T: 'static + Send + Sync + DynComponentBlueprint,
   {
-    self.names.lock().insert(TypeId::of::<T::Dyn>(), std::any::type_name::<T::Dyn>());
+    self
+      .names
+      .lock()
+      .insert(TypeId::of::<T::Dyn>(), std::any::type_name::<T::Dyn>());
     let mut lock = self.blueprints.lock();
     lock.insert(
       TypeId::of::<T::Dyn>(),
@@ -124,24 +131,33 @@ impl ComponentProvider {
     );
   }
 
-  async fn resolve_by_id(&self, type_id: TypeId, type_name: &'static str) -> Arc<dyn Any + Send + Sync> {
+  async fn resolve_by_id(
+    &self,
+    type_id: TypeId,
+    type_name: &'static str,
+  ) -> Arc<dyn Any + Send + Sync> {
+    let provider_id = Arc::as_ptr(&self.instances) as usize;
+    let mut resolution = RESOLUTION.try_with(Clone::clone).unwrap_or_default();
+    if resolution
+      .iter()
+      .any(|(provider, id, _)| *provider == provider_id && *id == type_id)
     {
-      let mut stack = self.resolving.lock();
-      if stack.iter().any(|(id, _)| *id == type_id) {
-        let chain: Vec<&str> = stack.iter().map(|(_, name)| *name).collect();
-        panic!(
-          "circular dependency detected: {} -> {}",
-          chain.join(" -> "),
-          type_name
-        );
-      }
-      stack.push((type_id, type_name));
+      let chain: Vec<&str> = resolution.iter().map(|(_, _, name)| *name).collect();
+      panic!(
+        "circular dependency detected: {} -> {}",
+        chain.join(" -> "),
+        type_name
+      );
     }
-    let _guard = ResolveGuard { resolving: &self.resolving, type_id };
+    let requested_by = resolution.last().map(|(_, _, name)| *name);
+    resolution.push((provider_id, type_id, type_name));
 
     let once_cell = {
       let mut lock = self.instances.lock();
-      lock.entry(type_id).or_insert_with(|| Arc::new(OnceCell::new())).clone()
+      lock
+        .entry(type_id)
+        .or_insert_with(|| Arc::new(OnceCell::new()))
+        .clone()
     };
 
     once_cell
@@ -152,8 +168,6 @@ impl ComponentProvider {
             Some(f) => f.clone(),
             None => {
               drop(lock);
-              let requested_by =
-                self.resolving.lock().iter().rev().nth(1).map(|(_, name)| *name);
               match requested_by {
                 Some(parent) => panic!(
                   "no registration for type `{}` (required by `{}`)",
@@ -164,7 +178,9 @@ impl ComponentProvider {
             }
           }
         };
-        factory(self.clone()).await
+        RESOLUTION
+          .scope(resolution, async { factory(self.clone()).await })
+          .await
       })
       .await
       .clone()
@@ -191,18 +207,25 @@ impl ComponentProvider {
 
     let mut components = HashMap::new();
     for type_id in type_ids {
-      let type_name = self.names.lock().get(&type_id).copied().unwrap_or("<unknown>");
+      let type_name = self
+        .names
+        .lock()
+        .get(&type_id)
+        .copied()
+        .unwrap_or("<unknown>");
       let value = self.resolve_by_id(type_id, type_name).await;
       components.insert(type_id, value);
     }
 
-    Components { components: Arc::new(components) }
+    Components {
+      components: Arc::new(components),
+    }
   }
 
   pub fn register_all(&self) {
     for registration in inventory::iter::<ComponentRegistration> {
       registration.0(self);
-    };
+    }
   }
 }
 
@@ -231,7 +254,15 @@ pub struct RegisterProbe<T>(pub RegisterDynTier<T>);
 
 impl<T> RegisterProbe<T> {
   pub fn new() -> Self {
-    RegisterProbe(RegisterDynTier(RegisterOnCreateTier(RegisterPlain(std::marker::PhantomData))))
+    RegisterProbe(RegisterDynTier(RegisterOnCreateTier(RegisterPlain(
+      std::marker::PhantomData,
+    ))))
+  }
+}
+
+impl<T> Default for RegisterProbe<T> {
+  fn default() -> Self {
+    Self::new()
   }
 }
 
@@ -304,6 +335,12 @@ pub struct FactoryProbe<T>(pub FactoryPlain<T>);
 impl<T> FactoryProbe<T> {
   pub fn new() -> Self {
     FactoryProbe(FactoryPlain(std::marker::PhantomData))
+  }
+}
+
+impl<T> Default for FactoryProbe<T> {
+  fn default() -> Self {
+    Self::new()
   }
 }
 
@@ -380,13 +417,17 @@ mod tests {
     #[async_trait]
     impl ComponentBlueprint for A {
       async fn new(ctx: &ComponentProvider) -> Self {
-        Self { _b: ctx.get().await }
+        Self {
+          _b: ctx.get().await,
+        }
       }
     }
     #[async_trait]
     impl ComponentBlueprint for B {
       async fn new(ctx: &ComponentProvider) -> Self {
-        Self { _a: ctx.get().await }
+        Self {
+          _a: ctx.get().await,
+        }
       }
     }
 
@@ -394,5 +435,38 @@ mod tests {
     ctx.register::<A>();
     ctx.register::<B>();
     ctx.get::<A>().await;
+  }
+
+  #[tokio::test]
+  async fn concurrent_resolution_waits_instead_of_looking_like_a_cycle() {
+    use tokio::sync::Notify;
+
+    let ctx = ComponentProvider::default();
+    let entered = Arc::new(Notify::new());
+    let release = Arc::new(Notify::new());
+    let entered_factory = entered.clone();
+    let release_factory = release.clone();
+    ctx.register_factory(move |_| {
+      let entered = entered_factory.clone();
+      let release = release_factory.clone();
+      async move {
+        entered.notify_one();
+        release.notified().await;
+        42u32
+      }
+    });
+
+    let first_ctx = ctx.clone();
+    let first = tokio::spawn(async move { first_ctx.get::<u32>().await });
+    entered.notified().await;
+    let second_ctx = ctx.clone();
+    let second = tokio::spawn(async move { second_ctx.get::<u32>().await });
+    tokio::task::yield_now().await;
+    release.notify_one();
+
+    let first_value = first.await.expect("first resolution should succeed");
+    let second_value = second.await.expect("second resolution should succeed");
+    assert_eq!(*first_value, 42);
+    assert!(Arc::ptr_eq(&first_value, &second_value));
   }
 }

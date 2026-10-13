@@ -45,6 +45,29 @@ pub use axumstart_db as db;
 /// ```
 #[cfg(feature = "router")]
 pub async fn serve(port: u16) -> std::io::Result<()> {
+  let app = build_app().await;
+  let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
+  axum::serve(listener, app).await
+}
+
+/// Loads `.env`, resolves registered components, and builds the auto-registered application.
+///
+/// The returned router already has its state. Add global middleware or merge routes, then
+/// use Axum's listener and graceful-shutdown APIs directly. Component initialization retains
+/// the same panic behavior as [`serve`].
+///
+/// ```no_run
+/// # async fn example() -> std::io::Result<()> {
+/// let app = axumstart::build_app().await
+///     .merge(axum::Router::new().route("/manual", axum::routing::get(|| async { "ok" })));
+/// let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
+/// axum::serve(listener, app)
+///     .with_graceful_shutdown(async { /* await an application shutdown signal */ })
+///     .await
+/// # }
+/// ```
+#[cfg(feature = "router")]
+pub async fn build_app() -> axum::Router {
   dotenvy::dotenv().ok();
 
   let provider = components::ComponentProvider::default();
@@ -52,8 +75,5 @@ pub async fn serve(port: u16) -> std::io::Result<()> {
   let state = provider.build().await;
 
   let auto_routes = router::register_routes(axum::Router::new(), &state);
-  let app = auto_routes.with_state(state);
-
-  let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
-  axum::serve(listener, app).await
+  auto_routes.with_state(state)
 }

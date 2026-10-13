@@ -3,8 +3,8 @@
 //! (`axumstart::db`, `axumstart::components`) if the consumer depends on that, or directly
 //! otherwise. Checked at macro-expansion time against the *consuming* crate's `Cargo.toml`.
 
+use proc_macro_crate::{FoundCrate, crate_name};
 use proc_macro2::{Ident, Span, TokenStream};
-use proc_macro_crate::{crate_name, FoundCrate};
 use quote::quote;
 
 pub fn db_path() -> TokenStream {

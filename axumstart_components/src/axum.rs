@@ -1,11 +1,24 @@
 use crate::Components;
 use axum::extract::FromRequestParts;
-use axum::http::request::Parts;
+use axum::http::{StatusCode, request::Parts};
+use axum::response::{IntoResponse, Response};
 use std::any::type_name;
 use std::ops::Deref;
 use std::sync::Arc;
 
 pub struct Inject<T: ?Sized + 'static + Send + Sync>(pub Arc<T>);
+
+#[derive(Debug)]
+pub struct MissingComponent {
+  type_name: &'static str,
+}
+
+impl IntoResponse for MissingComponent {
+  fn into_response(self) -> Response {
+    eprintln!("missing component: {}", self.type_name);
+    (StatusCode::INTERNAL_SERVER_ERROR, "component unavailable").into_response()
+  }
+}
 
 impl<T: ?Sized + 'static + Send + Sync> Deref for Inject<T> {
   type Target = T;
@@ -16,7 +29,7 @@ impl<T: ?Sized + 'static + Send + Sync> Deref for Inject<T> {
 }
 
 impl<T: ?Sized + 'static + Send + Sync> FromRequestParts<Components> for Inject<T> {
-  type Rejection = String;
+  type Rejection = MissingComponent;
 
   fn from_request_parts(
     _: &mut Parts,
@@ -26,7 +39,9 @@ impl<T: ?Sized + 'static + Send + Sync> FromRequestParts<Components> for Inject<
 
     async move {
       match component {
-        None => Err(format!("No component found for {:?}", type_name::<T>())),
+        None => Err(MissingComponent {
+          type_name: type_name::<T>(),
+        }),
         Some(component) => Ok(Self(component)),
       }
     }

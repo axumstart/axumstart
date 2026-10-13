@@ -35,3 +35,5 @@ values struct.
 ## Constraints
 
 - `_in` in the filter works as usual, switching that clause to the `QueryBuilder` path.
+- Filters requiring a JOIN are rejected at compile time. A belongs-to FK shortcut remains valid;
+  use an explicit method body/subquery for updates filtered through other tables.

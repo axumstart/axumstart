@@ -11,3 +11,7 @@ axumstart_router_macros = { path = "macros", version = "0.1.4" }
 axumstart_components = { path = "../axumstart_components", version = "0.1.4" }
 axum.workspace = true
 inventory.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+tower = { version = "0.5", features = ["util"] }

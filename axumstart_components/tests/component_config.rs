@@ -36,6 +36,7 @@ async fn component_config_panics_on_missing_required_env() {
 
   #[derive(Clone, ComponentConfig)]
   struct MissingRequired {
+    #[allow(dead_code)]
     #[env_var("DI_TEST_MISSING_REQUIRED")]
     value: String,
   }

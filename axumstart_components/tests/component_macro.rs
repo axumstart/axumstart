@@ -1,4 +1,4 @@
-use axumstart_components::{ComponentProvider, Component};
+use axumstart_components::{Component, ComponentProvider};
 use std::sync::Arc;
 
 trait Messager: Send + Sync {
@@ -26,14 +26,13 @@ async fn test_basic_resolution() {
 
   let components = ctx.build().await;
   assert!(components.get::<Lol>().is_some());
-  assert!(components.get::<dyn Messager>().is_some());
+  components.get::<dyn Messager>().unwrap().message();
   assert_eq!(components.len(), 3);
 }
 
 #[tokio::test]
 async fn test_get_cloned() {
-  #[derive(Component)]
-  #[derive(Clone)]
+  #[derive(Component, Clone)]
   struct Cheap {
     inner: Arc<Idk>,
   }

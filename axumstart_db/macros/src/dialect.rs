@@ -14,6 +14,30 @@ pub fn placeholder(idx: usize) -> String {
   }
 }
 
+/// Quotes a SQL identifier for the selected backend.
+pub fn quote_ident(identifier: &str) -> String {
+  if cfg!(feature = "mysql") {
+    format!("`{}`", identifier.replace('`', "``"))
+  } else {
+    format!("\"{}\"", identifier.replace('"', "\"\""))
+  }
+}
+
+pub fn order_columns(table: &str, columns: &[String]) -> String {
+  columns
+    .iter()
+    .map(|column| {
+      let (column, direction) = column
+        .strip_suffix(" DESC")
+        .map(|c| (c, " DESC"))
+        .or_else(|| column.strip_suffix(" ASC").map(|c| (c, " ASC")))
+        .unwrap_or((column.as_str(), ""));
+      format!("{}.{}{direction}", quote_ident(table), quote_ident(column))
+    })
+    .collect::<Vec<_>>()
+    .join(", ")
+}
+
 /// Postgres and SQLite both support `RETURNING *` (including after `ON CONFLICT`).
 /// MySQL has no RETURNING at all — callers emulate it with a follow-up SELECT
 /// (see `insert.rs`/`update.rs`'s `is_mysql()` branches).

@@ -10,7 +10,7 @@ include = ["src/**", "/LICENSE"]
 [features]
 default = ["components", "router"]
 components = ["dep:axumstart_components"]
-router = ["components", "dep:axumstart_router"]
+router = ["components", "dep:axumstart_router", "dep:axum", "dep:tokio", "dep:dotenvy"]
 postgres = ["dep:axumstart_db", "axumstart_db/postgres"]
 mysql = ["dep:axumstart_db", "axumstart_db/mysql"]
 sqlite = ["dep:axumstart_db", "axumstart_db/sqlite"]
@@ -39,9 +39,9 @@ proc-macro2 = "1"
 proc-macro-crate = "3"
 
 [dependencies]
-tokio.workspace = true
-axum.workspace = true
-dotenvy = "0.15"
+tokio = { workspace = true, optional = true }
+axum = { workspace = true, optional = true }
+dotenvy = { version = "0.15", optional = true }
 axumstart_components = { path = "axumstart_components", version = "0.1.4", optional = true }
 axumstart_db = { path = "axumstart_db", version = "0.1.4", optional = true }
 axumstart_router = { path = "axumstart_router", version = "0.1.4", optional = true }

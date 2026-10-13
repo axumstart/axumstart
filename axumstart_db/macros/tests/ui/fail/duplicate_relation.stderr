@@ -1,0 +1,5 @@
+error: relation target table `owner` is declared more than once
+ --> tests/ui/fail/duplicate_relation.rs:5:3
+  |
+5 | #[has_one(table = "owner")]
+  |   ^^^^^^^

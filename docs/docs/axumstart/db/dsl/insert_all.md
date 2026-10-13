@@ -16,9 +16,7 @@ Void vs. row-returning works the same as [insert](./insert.md#void-vs-row-return
 **Postgres/SQLite:** built with `sqlx::QueryBuilder::push_values` — `INSERT INTO "table" (cols...)
 VALUES ($1,$2),($3,$4),... RETURNING *`.
 
-**MySQL has no `RETURNING`.** The row-returning form does the batch `INSERT`, then re-`SELECT`s
-by primary-key range: `SELECT * WHERE {key} >= first_id AND {key} < first_id + rows.len() ORDER
-BY {key}`, relying on MySQL's **contiguous auto-increment allocation** for a single multi-row
-insert statement (true under the default `innodb_autoinc_lock_mode`). If the table's `{key}`
-isn't an auto-increment column, this will not return the right rows — use the `()`-returning form
-or a method body instead in that case.
+**MySQL has no `RETURNING`.** The row-returning form requires the key field in the values struct,
+performs one batch INSERT, and selects back using those bound keys. Without a supplied key, a
+nonempty row-returning batch fails before writing instead of guessing an auto-increment range.
+Use the `()`-returning form for generated-key batches.

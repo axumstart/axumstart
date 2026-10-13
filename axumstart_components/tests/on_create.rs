@@ -10,7 +10,9 @@ struct Base {
 #[async_trait]
 impl ComponentBlueprint for Base {
   async fn new(_ctx: &ComponentProvider) -> Self {
-    Self { created: Arc::new(Mutex::new(0)) }
+    Self {
+      created: Arc::new(Mutex::new(0)),
+    }
   }
 }
 
@@ -29,7 +31,9 @@ struct Dependent {
 impl ComponentBlueprint for Dependent {
   async fn new(ctx: &ComponentProvider) -> Self {
     let base = ctx.get::<Base>().await;
-    Self { saw_created: *base.created.lock() == 1 }
+    Self {
+      saw_created: *base.created.lock() == 1,
+    }
   }
 }
 
@@ -67,7 +71,9 @@ struct Signal {
 impl ComponentBlueprint for Signal {
   async fn new(_ctx: &ComponentProvider) -> Self {
     let (tx, _rx) = oneshot::channel();
-    Self { tx: Mutex::new(Some(tx)) }
+    Self {
+      tx: Mutex::new(Some(tx)),
+    }
   }
 }
 
@@ -78,14 +84,18 @@ struct SelfSpawner {
 #[async_trait]
 impl ComponentBlueprint for SelfSpawner {
   async fn new(ctx: &ComponentProvider) -> Self {
-    Self { signal: ctx.get().await }
+    Self {
+      signal: ctx.get().await,
+    }
   }
 }
 
 #[async_trait]
 impl OnCreate for SelfSpawner {
   async fn on_create(&self, ctx: &ComponentProvider) {
-    let Some(tx) = self.signal.tx.lock().take() else { return };
+    let Some(tx) = self.signal.tx.lock().take() else {
+      return;
+    };
     let ctx = ctx.clone();
     tokio::spawn(async move {
       let me: Arc<SelfSpawner> = ctx.get().await;
@@ -102,12 +112,18 @@ async fn on_create_can_spawn_task_that_resolves_self() {
 
   ctx.register_factory(move |_ctx: ComponentProvider| {
     let tx = tx.clone();
-    async move { Signal { tx: Mutex::new(tx.lock().take()) } }
+    async move {
+      Signal {
+        tx: Mutex::new(tx.lock().take()),
+      }
+    }
   });
   ctx.register_on_create::<SelfSpawner>();
 
   let spawner = ctx.get::<SelfSpawner>().await;
-  let resolved = rx.await.expect("on_create spawned task should resolve self");
+  let resolved = rx
+    .await
+    .expect("on_create spawned task should resolve self");
 
   assert!(Arc::ptr_eq(&spawner, &resolved));
 }

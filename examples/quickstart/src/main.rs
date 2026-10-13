@@ -114,6 +114,7 @@ pub trait PostRepository: Repository {
 #[derive(FromRow)]
 pub struct Tag {
   id: i32,
+  #[allow(dead_code)]
   name: String,
 }
 
@@ -191,7 +192,7 @@ async fn main() -> sqlx::Result<()> {
       name: "rust".into(),
     })
     .await?;
-  
+
   sqlx::query("INSERT INTO post_tag (post_id, tag_id) VALUES ($1, $2)")
     .bind(post.id)
     .bind(tag.id)

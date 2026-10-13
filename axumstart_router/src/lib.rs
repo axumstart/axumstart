@@ -5,19 +5,26 @@
 
 pub use axumstart_components::Components;
 pub use axumstart_components::axum::Inject;
-pub use axumstart_router_macros::{connect, delete, get, head, layer, options, patch, post, put, trace};
+pub use axumstart_router_macros::{
+  connect, delete, get, head, layer, options, patch, post, put, trace,
+};
 pub use inventory;
 
 /// One auto-registered route: takes the router built so far (and the resolved DI container, for
 /// `#[layer(...)]` factories that want it) and returns the router with this route added.
-pub struct RouteRegistration(pub fn(axum::Router<Components>, &Components) -> axum::Router<Components>);
+pub struct RouteRegistration(
+  pub fn(axum::Router<Components>, &Components) -> axum::Router<Components>,
+);
 inventory::collect!(RouteRegistration);
 
 /// Folds every `#[get]`/`#[post]`/etc.-registered route onto `router`, in whatever order
 /// `inventory` happens to iterate them in (unspecified, but harmless here since each
 /// registration only ever touches its own path — a path/method collision panics via axum's
 /// normal duplicate-route check, regardless of fold order).
-pub fn register_routes(router: axum::Router<Components>, ctx: &Components) -> axum::Router<Components> {
+pub fn register_routes(
+  router: axum::Router<Components>,
+  ctx: &Components,
+) -> axum::Router<Components> {
   let mut router = router;
   for registration in inventory::iter::<RouteRegistration> {
     router = registration.0(router, ctx);

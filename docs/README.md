@@ -28,16 +28,10 @@ This command generates static content into the `build` directory and can be serv
 
 ## Deployment
 
-Using SSH:
+The repository workflow builds the site and synchronizes `docs/build/` to the configured deployment
+host over SSH. It requires `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`, `SSH_PORT`, `SSH_USER`,
+`SSH_HOST`, and `SSH_TARGET_PATH` repository secrets. `SSH_KNOWN_HOSTS` is a reviewed host-key
+entry; the workflow does not trust a live `ssh-keyscan` result.
 
-```bash
-USE_SSH=true npm run deploy
-```
-
-Not using SSH:
-
-```bash
-GIT_USER=<Your GitHub username> npm run deploy
-```
-
-If you are using GitHub Pages for hosting, this command is a convenient way to build the website and push to the `gh-pages` branch.
+Deployment is performed by `.github/workflows/deploy-docs.yml`; local `npm run build` is the
+supported way to verify the generated site.

@@ -27,9 +27,10 @@ async fn insert(&self, values: EventValues) -> sqlx::Result<EventRow>; // INSERT
 **Postgres/SQLite:** `INSERT INTO "table" (cols...) VALUES ($1, ...) RETURNING *` — one
 round-trip.
 
-**MySQL has no `RETURNING`.** The row-returning form does `INSERT` → `last_insert_id()` →
-`SELECT * FROM table WHERE {key} = ?`. `{key}` comes from an optional struct-level attribute on
-the values struct, defaulting to `id`:
+**MySQL has no `RETURNING`.** When the values struct contains its key, the row-returning form
+selects back using that bound value. If the key is omitted, the helper checks for an auto-increment
+key before writing, then uses `last_insert_id()`; unsupported schemas return an error before the
+INSERT. `{key}` defaults to `id`:
 
 ```rust
 #[derive(SqlxInsert)]

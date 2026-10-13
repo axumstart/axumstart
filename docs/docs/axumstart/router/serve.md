@@ -55,29 +55,23 @@ axumstart = { version = "...", default-features = false, features = ["router"] }
 
 ## When you need more than `serve` gives you
 
-`serve` only serves auto-registered routes, with no hook for a manually-built `Router`, global
-middleware, `.merge()`-ing in another router, or custom listener configuration. If you need any
-of that, skip `serve` and call the pieces it wraps yourself:
+`build_app().await -> axum::Router` loads config, builds components, and returns the state-attached
+auto-registered router. Add routes and middleware, choose a listener, and use Axum's native
+graceful-shutdown support. `serve(port)` remains the convenience wrapper.
 
 ```rust
-use axumstart::components::ComponentProvider;
-use axumstart::router::register_routes;
-
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    dotenvy::dotenv().ok();
-
-    let provider = ComponentProvider::default();
-    provider.register_all();
-    let state = provider.build().await;
-
-    let app = register_routes(axum::Router::new(), &state)
+    let app = axumstart::build_app().await
         .merge(my_manual_router())
-        .layer(tower_http::trace::TraceLayer::new_for_http()) // global middleware
-        .with_state(state);
+        .layer(tower_http::trace::TraceLayer::new_for_http());
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
     axum::serve(listener, app).await
 }
-# fn my_manual_router() -> axum::Router<axumstart::router::Components> { axum::Router::new() }
+# fn my_manual_router() -> axum::Router { axum::Router::new() }
 ```
+
+Use `register_routes` directly when manual handlers need the same `Components` state before it
+is attached. `build_app` and `serve` retain the existing panic-on-component-initialization-failure
+behavior.

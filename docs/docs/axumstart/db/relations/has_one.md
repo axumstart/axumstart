@@ -2,6 +2,10 @@
 
 One-to-one — the foreign key lives on the **target** table, pointing back at this one.
 
+The target foreign key must have a `UNIQUE` constraint in the database schema. The macro does not
+create or inspect constraints. The quickstart's `0007_profile_user_unique.sql` migration enforces
+this after existing duplicate profiles are reconciled.
+
 ```rust
 #[repository(table = "user")]
 #[has_one(table = "profile")]

@@ -141,8 +141,10 @@ dependencies = [
 name = "axumstart_db"
 version = "0.1.4"
 dependencies = [
+ "async-trait",
  "axumstart_db_macros",
  "sqlx",
+ "tokio",
 ]
 
 [[package]]
@@ -167,6 +169,8 @@ dependencies = [
  "axumstart_components",
  "axumstart_router_macros",
  "inventory",
+ "tokio",
+ "tower",
 ]
 
 [[package]]
